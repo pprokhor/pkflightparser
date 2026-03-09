@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FlightCal">
+<meta name="theme-color" content="#0c0c0e">
+<title>Flight → Calendar</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230c0c0e' width='100' height='100' rx='20'/><text y='68' x='50' text-anchor='middle' font-size='55'>✈️</text></svg>">
+<style>
+  :root {
+    --bg: #0c0c0e; --card: #161619; --border: #2a2a30;
+    --accent: #3b82f6; --accent-m: #1e3a5f;
+    --txt: #e4e4e7; --txt-m: #71717a; --txt-d: #52525b;
+    --green: #22c55e; --green-d: #15803d;
+    --amber: #f59e0b; --amber-d: #92400e;
+    --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--txt);
+    min-height: 100vh; min-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    -webkit-font-smoothing: antialiased;
+  }
+  input, textarea, button { font-family: inherit; }
+
+  .header {
+    background: linear-gradient(135deg, rgba(30,58,95,.27), var(--card));
+    border-bottom: 1px solid var(--border);
+    padding: 24px 20px 20px; text-align: center;
+    padding-top: calc(env(safe-area-inset-top, 24px) + 12px);
+  }
+  .header h1 { font-size:20px; font-weight:700; letter-spacing:-.5px; }
+  .header p { margin-top:6px; font-size:13px; color:var(--txt-m); font-family:var(--mono); }
+
+  .wrap { max-width:480px; margin:0 auto; padding:20px 16px 40px; }
+
+  /* ── Inputs ── */
+  .field { margin-bottom:14px; }
+  .field label {
+    display:block; margin-bottom:4px; color:var(--txt-m);
+    font-size:11px; font-weight:600; letter-spacing:1.2px;
+    text-transform:uppercase; font-family:var(--mono);
+  }
+  .inp {
+    width:100%; background:#0f0f12; border:1px solid var(--border);
+    border-radius:8px; padding:10px 12px; color:var(--txt);
+    font-size:16px; font-family:var(--mono); outline:none;
+    transition: border-color .15s;
+  }
+  .inp:focus { border-color: var(--accent); }
+  .inp.ok { border-color: var(--green-d); }
+  .inp-code {
+    text-transform:uppercase; font-size:22px; font-weight:700;
+    letter-spacing:4px; text-align:center; padding:12px 8px;
+  }
+  textarea.inp { min-height:200px; resize:vertical; font-size:14px; line-height:1.6; }
+
+  .row { display:flex; gap:10px; }
+  .row > * { flex:1; }
+  .row > .wider { flex:1.3; }
+
+  /* ── Route ── */
+  .route { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .route-arrow { font-size:24px; color:var(--txt-d); margin-top:-12px; font-family:var(--mono); }
+  .tz-badge {
+    display:inline-block; margin-top:4px; min-height:18px;
+    font-size:11px; font-family:var(--mono);
+  }
+  .tz-badge .known {
+    color:var(--green); background:rgba(21,128,61,.13);
+    padding:2px 6px; border-radius:4px;
+    border:1px solid rgba(21,128,61,.27);
+  }
+  .tz-badge .unknown { color:var(--txt-d); }
+
+  /* ── Buttons ── */
+  .btn {
+    width:100%; padding:14px 0; border:none; border-radius:10px;
+    font-size:16px; font-weight:700; font-family:var(--mono);
+    cursor:pointer; transition: opacity .15s;
+  }
+  .btn:active { opacity:.85; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:disabled { background:rgba(82,82,91,.2); color:var(--txt-d); cursor:not-allowed; }
+  .btn-secondary {
+    background:transparent; color:var(--txt-m);
+    border:1px solid var(--border); font-size:13px; padding:10px 0;
+    margin-top:10px;
+  }
+  .btn-back {
+    background:transparent; border:1px solid var(--border);
+    border-radius:8px; padding:6px 14px; color:var(--txt-m);
+    font-size:13px; cursor:pointer; font-family:var(--mono);
+  }
+
+  /* ── Cards ── */
+  .card {
+    background:var(--card); border:1px solid var(--border);
+    border-radius:12px; padding:20px; margin-bottom:16px;
+  }
+  .card-title {
+    font-size:12px; font-weight:700; color:var(--txt-m);
+    letter-spacing:1.2px; text-transform:uppercase;
+    font-family:var(--mono); margin-bottom:10px;
+  }
+
+  /* ── Toggle ── */
+  .toggle {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; margin-bottom:14px;
+    background:var(--card); border:1px solid var(--border);
+    border-radius:8px; cursor:pointer; user-select:none;
+  }
+  .toggle span:first-child { font-size:14px; font-weight:600; color:var(--txt-m); }
+  .toggle .arrow { color:var(--txt-d); font-size:12px; font-family:var(--mono); transition:transform .2s; }
+  .toggle.open .arrow { transform:rotate(180deg); }
+
+  .details-panel {
+    background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:16px; margin-bottom:20px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+
+  /* ── Preview ── */
+  .preview { margin-bottom:20px; }
+  .preview-label { font-size:11px; font-weight:600; color:var(--txt-d); letter-spacing:1px; margin-bottom:8px; font-family:var(--mono); }
+  .preview-title { font-size:20px; font-weight:700; margin-bottom:6px; }
+  .preview-meta { font-size:13px; color:var(--txt-m); font-family:var(--mono); line-height:1.8; }
+  .preview-tz { color:var(--green); font-size:11px; }
+
+  /* ── Status badge ── */
+  .status-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .badge {
+    font-size:12px; font-family:var(--mono); padding:4px 10px;
+    border-radius:6px;
+  }
+  .badge-ok { color:var(--green); background:rgba(21,128,61,.13); border:1px solid rgba(21,128,61,.27); }
+  .badge-warn { color:var(--amber); background:rgba(146,64,14,.13); border:1px solid rgba(146,64,14,.27); }
+
+  /* ── Info ── */
+  .info {
+    font-size:12px; color:var(--txt-d); line-height:1.8;
+    font-family:var(--mono); background:var(--card);
+    border-radius:10px; padding:16px; border:1px solid var(--border);
+  }
+  .info strong { color:var(--txt-m); }
+
+  /* ── Toast ── */
+  .toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--green); color:#000; padding:10px 20px;
+    border-radius:8px; font-size:14px; font-weight:600;
+    font-family:var(--mono); white-space:nowrap; z-index:999;
+    animation: fadeUp .25s ease;
+  }
+  @keyframes fadeUp { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="font-size:32px; margin-bottom:4px;">✈️</div>
+  <h1>Flight → Calendar</h1>
+  <p>Paste · Review · Download .ics</p>
+</div>
+
+<!-- ═══════ PASTE SCREEN ═══════ -->
+<div id="screen-paste" class="wrap">
+  <div class="card">
+    <div class="card-title">Paste flight confirmation</div>
+    <textarea id="raw-input" class="inp" placeholder="Share from your airline app and paste here...
+
+Example:
+Confirmation #: G9NR6M
+Flight# DL1061
+Departs LAX
+on Thursday, Mar 12, 2026 at 20:45
+Arrives SJC
+on Thursday, Mar 12, 2026 at 22:02"></textarea>
+  </div>
+  <button id="btn-parse" class="btn btn-primary" disabled>Parse Flight →</button>
+  <div class="info" style="margin-top:16px;">
+    <strong>Works with:</strong><br>
+    ✓ Delta, United, American, Alaska, Southwest<br>
+    ✓ JetBlue, Spirit, Frontier, Hawaiian<br>
+    ✓ International carriers (BA, LH, EK, etc.)<br>
+    ✓ Confirmation emails (paste relevant section)<br><br>
+    <strong>iPhone:</strong> Share in airline app → Copy → paste here
+  </div>
+</div>
+
+<!-- ═══════ REVIEW SCREEN ═══════ -->
+<div id="screen-review" class="wrap hidden">
+  <div class="status-bar">
+    <button id="btn-back" class="btn-back">← Back</button>
+    <span id="badge-count" class="badge badge-ok">0 fields parsed</span>
+  </div>
+
+  <!-- Route -->
+  <div class="route">
+    <div style="flex:1">
+      <label style="display:block;margin-bottom:4px;color:var(--txt-m);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;font-family:var(--mono)">From</label>
+      <input id="f-dep" class="inp inp-code" maxlength="3" placeholder="LAX">
+      <div class="tz-badge"><span id="tz-dep"></span></div>
+    </div>
+    <div class="route-arrow">→</div>
+    <div style="flex:1">
+      <label style="display:block;margin-bottom:4px;color:var(--txt-m);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;font-family:var(--mono)">To</label>
+      <input id="f-arr" class="inp inp-code" maxlength="3" placeholder="JFK">
+      <div class="tz-badge"><span id="tz-arr"></span></div>
+    </div>
+  </div>
+
+  <!-- Departure -->
+  <div class="row field">
+    <div class="wider">
+      <label>Depart Date</label>
+      <input id="f-dep-date" type="date" class="inp">
+    </div>
+    <div>
+      <label>Depart Time</label>
+      <input id="f-dep-time" type="time" class="inp">
+    </div>
+  </div>
+
+  <!-- Arrival -->
+  <div class="row field">
+    <div class="wider">
+      <label>Arrive Date</label>
+      <input id="f-arr-date" type="date" class="inp">
+    </div>
+    <div>
+      <label>Arrive Time</label>
+      <input id="f-arr-time" type="time" class="inp">
+    </div>
+  </div>
+
+  <!-- Flight + Confirmation -->
+  <div class="row field">
+    <div>
+      <label>Flight #</label>
+      <input id="f-flight" class="inp" placeholder="DL1061">
+    </div>
+    <div>
+      <label>Confirmation</label>
+      <input id="f-confirm" class="inp" placeholder="ABC123" style="text-transform:uppercase">
+    </div>
+  </div>
+
+  <!-- More Details Toggle -->
+  <div id="toggle-more" class="toggle">
+    <span>More Details</span>
+    <span class="arrow">▼</span>
+  </div>
+
+  <div id="details-panel" class="details-panel hidden">
+    <div class="row">
+      <div><label>Airline</label><input id="f-airline" class="inp" placeholder="Delta"></div>
+      <div><label>Seat</label><input id="f-seat" class="inp" placeholder="14A" style="text-transform:uppercase"></div>
+    </div>
+    <div class="row">
+      <div><label>Terminal</label><input id="f-terminal" class="inp" placeholder="B"></div>
+      <div><label>Gate</label><input id="f-gate" class="inp" placeholder="42"></div>
+    </div>
+    <div><label>Boarding Time</label><input id="f-boarding" type="time" class="inp"></div>
+    <div><label>Notes</label><textarea id="f-notes" class="inp" style="min-height:60px;resize:vertical" placeholder="Anything else..."></textarea></div>
+  </div>
+
+  <!-- Preview -->
+  <div id="preview" class="card preview hidden">
+    <div class="preview-label">CALENDAR PREVIEW</div>
+    <div id="prev-title" class="preview-title"></div>
+    <div id="prev-meta" class="preview-meta"></div>
+  </div>
+
+  <button id="btn-download" class="btn btn-primary" disabled>Download .ics</button>
+  <button id="btn-new" class="btn btn-secondary">New Flight</button>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+// ── Data ────────────────────────────────────────────────────────────
+const AIRPORT_TZ={ATL:"America/New_York",BOS:"America/New_York",BWI:"America/New_York",CLT:"America/New_York",DCA:"America/New_York",DTW:"America/New_York",EWR:"America/New_York",FLL:"America/New_York",IAD:"America/New_York",JFK:"America/New_York",LGA:"America/New_York",MCO:"America/New_York",MIA:"America/New_York",PBI:"America/New_York",PHL:"America/New_York",PIT:"America/New_York",RDU:"America/New_York",RIC:"America/New_York",RSW:"America/New_York",TPA:"America/New_York",BNA:"America/Chicago",AUS:"America/Chicago",DAL:"America/Chicago",DFW:"America/Chicago",HOU:"America/Chicago",IAH:"America/Chicago",IND:"America/Chicago",MCI:"America/Chicago",MDW:"America/Chicago",MEM:"America/Chicago",MKE:"America/Chicago",MSP:"America/Chicago",MSY:"America/Chicago",OKC:"America/Chicago",ORD:"America/Chicago",SAT:"America/Chicago",STL:"America/Chicago",CLE:"America/New_York",CVG:"America/New_York",CMH:"America/New_York",DEN:"America/Denver",ABQ:"America/Denver",BOI:"America/Boise",ELP:"America/Denver",SLC:"America/Denver",TUS:"America/Denver",JAC:"America/Denver",LAX:"America/Los_Angeles",BUR:"America/Los_Angeles",LGB:"America/Los_Angeles",SNA:"America/Los_Angeles",ONT:"America/Los_Angeles",SAN:"America/Los_Angeles",SFO:"America/Los_Angeles",SJC:"America/Los_Angeles",OAK:"America/Los_Angeles",SMF:"America/Los_Angeles",PDX:"America/Los_Angeles",SEA:"America/Los_Angeles",LAS:"America/Los_Angeles",PHX:"America/Phoenix",RNO:"America/Los_Angeles",PSP:"America/Los_Angeles",HNL:"Pacific/Honolulu",OGG:"Pacific/Honolulu",KOA:"Pacific/Honolulu",LIH:"Pacific/Honolulu",ANC:"America/Anchorage",FAI:"America/Anchorage",YYZ:"America/Toronto",YUL:"America/Toronto",YOW:"America/Toronto",YVR:"America/Vancouver",YYC:"America/Edmonton",YEG:"America/Edmonton",YWG:"America/Winnipeg",YHZ:"America/Halifax",YQB:"America/Toronto",MEX:"America/Mexico_City",CUN:"America/Cancun",GDL:"America/Mexico_City",SJD:"America/Mazatlan",PVR:"America/Mexico_City",PTY:"America/Panama",SJO:"America/Costa_Rica",SXM:"America/Lower_Princes",NAS:"America/Nassau",MBJ:"America/Jamaica",SJU:"America/Puerto_Rico",STT:"America/Virgin",PUJ:"America/Santo_Domingo",GRU:"America/Sao_Paulo",GIG:"America/Sao_Paulo",EZE:"America/Argentina/Buenos_Aires",SCL:"America/Santiago",BOG:"America/Bogota",LIM:"America/Lima",LHR:"Europe/London",LGW:"Europe/London",STN:"Europe/London",LTN:"Europe/London",MAN:"Europe/London",EDI:"Europe/London",CDG:"Europe/Paris",ORY:"Europe/Paris",AMS:"Europe/Amsterdam",FRA:"Europe/Berlin",MUC:"Europe/Berlin",BER:"Europe/Berlin",HAM:"Europe/Berlin",DUS:"Europe/Berlin",CGN:"Europe/Berlin",MAD:"Europe/Madrid",BCN:"Europe/Madrid",AGP:"Europe/Madrid",IBZ:"Europe/Madrid",FCO:"Europe/Rome",MXP:"Europe/Rome",VCE:"Europe/Rome",NAP:"Europe/Rome",ZRH:"Europe/Zurich",GVA:"Europe/Zurich",VIE:"Europe/Vienna",BRU:"Europe/Brussels",LIS:"Europe/Lisbon",OPO:"Europe/Lisbon",CPH:"Europe/Copenhagen",OSL:"Europe/Oslo",ARN:"Europe/Stockholm",HEL:"Europe/Helsinki",WAW:"Europe/Warsaw",KRK:"Europe/Warsaw",PRG:"Europe/Prague",BUD:"Europe/Budapest",ATH:"Europe/Athens",IST:"Europe/Istanbul",SAW:"Europe/Istanbul",DUB:"Europe/Dublin",KEF:"Atlantic/Reykjavik",INN:"Europe/Vienna",SZG:"Europe/Vienna",DXB:"Asia/Dubai",AUH:"Asia/Dubai",DOH:"Asia/Qatar",TLV:"Asia/Jerusalem",AMM:"Asia/Amman",RUH:"Asia/Riyadh",JED:"Asia/Riyadh",JNB:"Africa/Johannesburg",CPT:"Africa/Johannesburg",CAI:"Africa/Cairo",CMN:"Africa/Casablanca",NBO:"Africa/Nairobi",HKG:"Asia/Hong_Kong",MFM:"Asia/Macau",SIN:"Asia/Singapore",NRT:"Asia/Tokyo",HND:"Asia/Tokyo",KIX:"Asia/Tokyo",ICN:"Asia/Seoul",GMP:"Asia/Seoul",PEK:"Asia/Shanghai",PVG:"Asia/Shanghai",CAN:"Asia/Shanghai",CTU:"Asia/Shanghai",TPE:"Asia/Taipei",BKK:"Asia/Bangkok",DMK:"Asia/Bangkok",KUL:"Asia/Kuala_Lumpur",MNL:"Asia/Manila",DEL:"Asia/Kolkata",BOM:"Asia/Kolkata",BLR:"Asia/Kolkata",MAA:"Asia/Kolkata",SYD:"Australia/Sydney",MEL:"Australia/Melbourne",BNE:"Australia/Brisbane",PER:"Australia/Perth",AKL:"Pacific/Auckland"};
+
+const AIRPORT_NAMES={ATL:"Hartsfield-Jackson Atlanta",BOS:"Boston Logan",BWI:"Baltimore-Washington",CLT:"Charlotte Douglas",DCA:"Reagan National",DTW:"Detroit Metro",EWR:"Newark Liberty",FLL:"Fort Lauderdale-Hollywood",IAD:"Dulles International",JFK:"John F. Kennedy",LGA:"LaGuardia",MCO:"Orlando International",MIA:"Miami International",PHL:"Philadelphia",TPA:"Tampa",BNA:"Nashville",AUS:"Austin-Bergstrom",DAL:"Dallas Love Field",DFW:"Dallas/Fort Worth",HOU:"Houston Hobby",IAH:"Houston Intercontinental",ORD:"O'Hare",DEN:"Denver International",SLC:"Salt Lake City",JAC:"Jackson Hole",LAX:"Los Angeles",BUR:"Burbank",SNA:"John Wayne",SAN:"San Diego",SFO:"San Francisco",SJC:"San Jose Mineta",OAK:"Oakland",PDX:"Portland",SEA:"Seattle-Tacoma",LAS:"Las Vegas Harry Reid",PHX:"Phoenix Sky Harbor",PSP:"Palm Springs",HNL:"Honolulu",ANC:"Anchorage",YYZ:"Toronto Pearson",YUL:"Montreal-Trudeau",YVR:"Vancouver",MEX:"Mexico City",CUN:"Cancun",SJD:"Los Cabos",LHR:"London Heathrow",LGW:"London Gatwick",CDG:"Paris CDG",AMS:"Amsterdam Schiphol",FRA:"Frankfurt",MUC:"Munich",BER:"Berlin",MAD:"Madrid-Barajas",BCN:"Barcelona",FCO:"Rome Fiumicino",MXP:"Milan Malpensa",ZRH:"Zurich",VIE:"Vienna",LIS:"Lisbon",CPH:"Copenhagen",IST:"Istanbul",DUB:"Dublin",PRG:"Prague",DXB:"Dubai",DOH:"Doha Hamad",TLV:"Tel Aviv Ben Gurion",HKG:"Hong Kong",MFM:"Macau",SIN:"Singapore Changi",NRT:"Tokyo Narita",HND:"Tokyo Haneda",ICN:"Seoul Incheon",PEK:"Beijing Capital",PVG:"Shanghai Pudong",TPE:"Taipei Taoyuan",BKK:"Bangkok Suvarnabhumi",KUL:"Kuala Lumpur",DEL:"Delhi",BOM:"Mumbai",SYD:"Sydney",MEL:"Melbourne",AKL:"Auckland",GRU:"Sao Paulo",BOG:"Bogota",JNB:"Johannesburg",SJU:"San Juan",INN:"Innsbruck",SZG:"Salzburg"};
+
+const AIRLINE_MAP={DL:"Delta",UA:"United",AA:"American",WN:"Southwest",B6:"JetBlue",NK:"Spirit",F9:"Frontier",AS:"Alaska",HA:"Hawaiian",SY:"Sun Country",BA:"British Airways",LH:"Lufthansa",AF:"Air France",KL:"KLM",EK:"Emirates",QR:"Qatar Airways",SQ:"Singapore Airlines",CX:"Cathay Pacific",NH:"ANA",JL:"JAL",AC:"Air Canada",QF:"Qantas",NZ:"Air New Zealand",TK:"Turkish Airlines",LX:"Swiss",IB:"Iberia",SK:"SAS",AY:"Finnair",OS:"Austrian",EI:"Aer Lingus",VS:"Virgin Atlantic",DY:"Norwegian",FR:"Ryanair",U2:"easyJet"};
+
+const MONTH_MAP={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+
+// ── Parser helpers ──────────────────────────────────────────────────
+function parseDate(s){
+  let m;
+  if(m=s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/)) return m[1]+"-"+p2(m[2])+"-"+p2(m[3]);
+  if(m=s.match(/([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})/)){const mo=MONTH_MAP[m[1].toLowerCase()];if(mo)return m[3]+"-"+p2(mo)+"-"+p2(m[2]);}
+  if(m=s.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/)){const mo=MONTH_MAP[m[2].toLowerCase()];if(mo)return m[3]+"-"+p2(mo)+"-"+p2(m[1]);}
+  if(m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)) return m[3]+"-"+p2(m[1])+"-"+p2(m[2]);
+  return null;
+}
+function parseTime(s){
+  let m;
+  if(m=s.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)){let h=+m[1],min=+m[2];if(m[3].toLowerCase()==="pm"&&h!==12)h+=12;if(m[3].toLowerCase()==="am"&&h===12)h=0;return p2(h)+":"+p2(min);}
+  if(m=s.match(/(\d{1,2}):(\d{2})/)) return p2(+m[1])+":"+p2(+m[2]);
+  return null;
+}
+function p2(n){return String(n).padStart(2,"0");}
+
+function parseFlightText(raw){
+  const text=raw.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  const r={depCode:"",arrCode:"",depDate:"",depTime:"",arrDate:"",arrTime:"",flightNum:"",airline:"",terminal:"",gate:"",boardingTime:"",seat:"",confirmNum:"",notes:""};
+  let m;
+
+  // Confirmation
+  if(m=text.match(/(?:confirm(?:ation)?[\s]*(?:#|code|number)?[\s:]*|record\s*locator[\s:]*|pnr[\s:]*|booking\s*(?:ref|reference|code|number)[\s:]*)([A-Z0-9]{5,8})/i)) r.confirmNum=m[1].toUpperCase();
+
+  // Flight number
+  if(m=text.match(/(?:flight[\s#:]*)?([A-Z]{2})\s*(\d{1,4})/i)){r.flightNum=m[1].toUpperCase()+m[2];const c=m[1].toUpperCase();if(AIRLINE_MAP[c])r.airline=AIRLINE_MAP[c];}
+
+  // Airports
+  if(m=text.match(/depart(?:s|ure|ing)?[\s:]+([A-Z]{3})/i)) r.depCode=m[1].toUpperCase();
+  if(m=text.match(/arriv(?:es?|al|ing)?[\s:]+(?:at\s+)?([A-Z]{3})/i)) r.arrCode=m[1].toUpperCase();
+  if(!r.depCode||!r.arrCode){if(m=text.match(/\b([A-Z]{3})\s*(?:→|->|—|–|-|to)\s*([A-Z]{3})\b/i)){if(!r.depCode)r.depCode=m[1].toUpperCase();if(!r.arrCode)r.arrCode=m[2].toUpperCase();}}
+  if(!r.depCode){if(m=text.match(/\bfrom[\s:]+([A-Z]{3})\b/i))r.depCode=m[1].toUpperCase();}
+  if(!r.arrCode){if(m=text.match(/\bto[\s:]+([A-Z]{3})\b/i))r.arrCode=m[1].toUpperCase();}
+
+  // Date+Time: Delta style
+  if(m=text.match(/depart(?:s|ure|ing)?[^\n]*\n?[^\n]*?(?:on\s+)?(?:\w+day,?\s+)?([A-Za-z]+\s+\d{1,2},?\s+\d{4})\s+(?:at\s+)?(\d{1,2}:\d{2}\s*(?:am|pm)?)/i)){const d=parseDate(m[1]),t=parseTime(m[2]);if(d)r.depDate=d;if(t)r.depTime=t;}
+  if(m=text.match(/arriv(?:es?|al|ing)?[^\n]*\n?[^\n]*?(?:on\s+)?(?:\w+day,?\s+)?([A-Za-z]+\s+\d{1,2},?\s+\d{4})\s+(?:at\s+)?(\d{1,2}:\d{2}\s*(?:am|pm)?)/i)){const d=parseDate(m[1]),t=parseTime(m[2]);if(d)r.arrDate=d;if(t)r.arrTime=t;}
+
+  // Fallback: all date+time combos
+  if(!r.depDate||!r.depTime||!r.arrDate||!r.arrTime){
+    const pat=/(?:(?:\w+day,?\s+)?(?:[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4}))[\s,]+(?:at\s+)?(\d{1,2}:\d{2}\s*(?:am|pm)?)/gi;
+    const all=[];let mm;while((mm=pat.exec(text))!==null){const d=parseDate(mm[0]),t=parseTime(mm[0]);if(d&&t)all.push({date:d,time:t});}
+    if(all.length>=1&&!r.depDate){r.depDate=all[0].date;r.depTime=all[0].time;}
+    if(all.length>=2&&!r.arrDate){r.arrDate=all[1].date;r.arrTime=all[1].time;}
+  }
+  if(r.depDate&&!r.arrDate) r.arrDate=r.depDate;
+
+  if(m=text.match(/seat[\s#:]*([0-9]{1,3}\s*[A-Z])\b/i)) r.seat=m[1].replace(/\s/g,"").toUpperCase();
+  if(m=text.match(/terminal[\s#:]*([A-Z0-9]{1,3})\b/i)) r.terminal=m[1].toUpperCase();
+  if(m=text.match(/gate[\s#:]*([A-Z]?\d{1,4}[A-Z]?)\b/i)) r.gate=m[1].toUpperCase();
+  if(m=text.match(/board(?:ing)?[\s]*(?:time)?[\s:]+(\d{1,2}:\d{2}\s*(?:am|pm)?)/i)) r.boardingTime=parseTime(m[1])||"";
+
+  return r;
+}
+
+// ── ICS generation ──────────────────────────────────────────────────
+function foldLine(line){
+  const bytes=new TextEncoder().encode(line);
+  if(bytes.length<=75)return line;
+  let result="",len=0,first=true;
+  for(const ch of line){const cb=new TextEncoder().encode(ch).length;const lim=first?75:74;
+    if(len+cb>lim){result+="\r\n ";len=1;first=false;}result+=ch;len+=cb;}
+  return result;
+}
+
+function makeICS(d){
+  const depTZ=AIRPORT_TZ[d.depCode]||"UTC",arrTZ=AIRPORT_TZ[d.arrCode]||"UTC";
+  const[dy,dm,dd]=d.depDate.split("-").map(Number);
+  const[dh,dmin]=d.depTime.split(":").map(Number);
+  const[ay,am,ad]=d.arrDate.split("-").map(Number);
+  const[ah,amin]=d.arrTime.split(":").map(Number);
+  const dtS=`${dy}${p2(dm)}${p2(dd)}T${p2(dh)}${p2(dmin)}00`;
+  const dtE=`${ay}${p2(am)}${p2(ad)}T${p2(ah)}${p2(amin)}00`;
+  const summary=`${d.depCode} ✈️ ${d.arrCode}`;
+  const location=AIRPORT_NAMES[d.depCode]?`${AIRPORT_NAMES[d.depCode]} (${d.depCode})`:d.depCode;
+
+  const desc=[];
+  if(d.flightNum)desc.push(`Flight: ${d.airline?d.airline+" ":""}${d.flightNum}`);
+  if(d.confirmNum)desc.push(`Confirmation: ${d.confirmNum}`);
+  if(d.seat)desc.push(`Seat: ${d.seat}`);
+  if(d.terminal)desc.push(`Terminal: ${d.terminal}`);
+  if(d.gate)desc.push(`Gate: ${d.gate}`);
+  if(d.boardingTime)desc.push(`Boarding: ${d.boardingTime}`);
+  desc.push(`\\nRoute: ${d.depCode} → ${d.arrCode}`);
+  desc.push(`Departs: ${depTZ}`);
+  desc.push(`Arrives: ${arrTZ}`);
+  if(d.notes)desc.push(`\\n${d.notes}`);
+
+  const uid=`${Date.now()}-${Math.random().toString(36).slice(2)}@flightcal`;
+  let alarm="";
+  if(d.boardingTime){const[bh,bm]=d.boardingTime.split(":").map(Number);let diff=(dh*60+dmin)-(bh*60+bm);if(diff<0)diff+=1440;
+    if(diff>0&&diff<600)alarm=["BEGIN:VALARM","TRIGGER:-PT"+diff+"M","ACTION:DISPLAY","DESCRIPTION:Boarding — "+(d.airline||"")+" "+(d.flightNum||""),"END:VALARM"].join("\r\n");}
+
+  return["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//FlightCal//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "BEGIN:VEVENT",`UID:${uid}`,`DTSTART;TZID=${depTZ}:${dtS}`,`DTEND;TZID=${arrTZ}:${dtE}`,
+    `SUMMARY:${summary}`,`LOCATION:${location}`,`DESCRIPTION:${desc.join("\\n")}`,
+    "STATUS:CONFIRMED","TRANSP:OPAQUE",...(alarm?[alarm]:[]),"END:VEVENT","END:VCALENDAR"].map(foldLine).join("\r\n");
+}
+
+// ── DOM wiring ──────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const screens={paste:$("screen-paste"),review:$("screen-review")};
+let data={};
+
+function show(name){Object.values(screens).forEach(s=>s.classList.add("hidden"));screens[name].classList.remove("hidden");}
+
+function tzLabel(code){
+  const tz=AIRPORT_TZ[code.toUpperCase()];
+  if(!tz)return code.length===3?'<span class="unknown">⚠ unknown</span>':"";
+  return`<span class="known">${tz.split("/").pop().replace(/_/g," ")}</span>`;
+}
+
+function updateReview(){
+  const d=data;
+  $("f-dep").value=d.depCode;$("f-arr").value=d.arrCode;
+  $("f-dep-date").value=d.depDate;$("f-dep-time").value=d.depTime;
+  $("f-arr-date").value=d.arrDate;$("f-arr-time").value=d.arrTime;
+  $("f-flight").value=d.flightNum;$("f-confirm").value=d.confirmNum;
+  $("f-airline").value=d.airline;$("f-seat").value=d.seat;
+  $("f-terminal").value=d.terminal;$("f-gate").value=d.gate;
+  $("f-boarding").value=d.boardingTime;$("f-notes").value=d.notes;
+  refreshUI();
+}
+
+function refreshUI(){
+  // TZ badges
+  $("tz-dep").innerHTML=tzLabel(data.depCode);
+  $("tz-arr").innerHTML=tzLabel(data.arrCode);
+
+  // Green borders on filled fields
+  const pairs=[["f-dep","depCode"],["f-arr","arrCode"],["f-dep-date","depDate"],["f-dep-time","depTime"],
+    ["f-arr-date","arrDate"],["f-arr-time","arrTime"],["f-flight","flightNum"],["f-confirm","confirmNum"]];
+  pairs.forEach(([id,key])=>{const el=$(id);el.classList.toggle("ok",!!data[key]);});
+
+  // Badge count
+  const count=[data.depCode,data.arrCode,data.depDate,data.depTime,data.arrDate,data.arrTime,
+    data.flightNum,data.confirmNum,data.seat,data.terminal,data.gate,data.airline].filter(Boolean).length;
+  const badge=$("badge-count");
+  badge.textContent=count+" fields parsed";
+  badge.className="badge "+(count>=6?"badge-ok":"badge-warn");
+
+  // Can generate?
+  const canGen=data.depCode.length===3&&data.arrCode.length===3&&data.depDate&&data.depTime&&data.arrDate&&data.arrTime;
+  $("btn-download").disabled=!canGen;
+
+  // Preview
+  const prev=$("preview");
+  if(canGen){
+    prev.classList.remove("hidden");
+    const depTZ=AIRPORT_TZ[data.depCode.toUpperCase()]||"UTC";
+    const arrTZ=AIRPORT_TZ[data.arrCode.toUpperCase()]||"UTC";
+    $("prev-title").textContent=data.depCode.toUpperCase()+" ✈️ "+data.arrCode.toUpperCase();
+    let meta=`<div>${data.depDate} ${data.depTime} <span class="preview-tz">${depTZ.split("/").pop().replace(/_/g," ")}</span></div>`;
+    meta+=`<div>${data.arrDate} ${data.arrTime} <span class="preview-tz">${arrTZ.split("/").pop().replace(/_/g," ")}</span></div>`;
+    const info=[data.airline?data.airline+" ":"",data.flightNum,data.seat?" · "+data.seat.toUpperCase():"",data.confirmNum?" · "+data.confirmNum.toUpperCase():""].join("");
+    if(info.trim()) meta+=`<div style="margin-top:4px;color:var(--txt)">${info}</div>`;
+    $("prev-meta").innerHTML=meta;
+  } else {
+    prev.classList.add("hidden");
+  }
+}
+
+// Bind all review inputs
+function bindField(id,key,transform){
+  $(id).addEventListener("input",e=>{
+    data[key]=transform?transform(e.target.value):e.target.value;
+    refreshUI();
+  });
+}
+bindField("f-dep","depCode",v=>v.replace(/[^a-zA-Z]/g,"").slice(0,3).toUpperCase());
+bindField("f-arr","arrCode",v=>v.replace(/[^a-zA-Z]/g,"").slice(0,3).toUpperCase());
+bindField("f-dep-date","depDate");bindField("f-dep-time","depTime");
+bindField("f-arr-date","arrDate");bindField("f-arr-time","arrTime");
+bindField("f-flight","flightNum");bindField("f-confirm","confirmNum",v=>v.toUpperCase());
+bindField("f-airline","airline");bindField("f-seat","seat",v=>v.toUpperCase());
+bindField("f-terminal","terminal",v=>v.toUpperCase());bindField("f-gate","gate",v=>v.toUpperCase());
+bindField("f-boarding","boardingTime");bindField("f-notes","notes");
+
+// Paste screen
+$("raw-input").addEventListener("input",e=>{$("btn-parse").disabled=!e.target.value.trim();});
+
+$("btn-parse").addEventListener("click",()=>{
+  const raw=$("raw-input").value.trim();
+  if(!raw)return;
+  data=parseFlightText(raw);
+  updateReview();
+  // auto-show details if extras were parsed
+  if(data.terminal||data.gate||data.boardingTime||data.seat){
+    $("details-panel").classList.remove("hidden");
+    $("toggle-more").classList.add("open");
+  }
+  show("review");
+});
+
+// Toggle more details
+$("toggle-more").addEventListener("click",()=>{
+  $("details-panel").classList.toggle("hidden");
+  $("toggle-more").classList.toggle("open");
+});
+
+// Back / New
+$("btn-back").addEventListener("click",()=>show("paste"));
+$("btn-new").addEventListener("click",()=>{$("raw-input").value="";$("btn-parse").disabled=true;show("paste");});
+
+// Download
+$("btn-download").addEventListener("click",()=>{
+  const ics=makeICS({...data,depCode:data.depCode.toUpperCase(),arrCode:data.arrCode.toUpperCase()});
+  const blob=new Blob([ics],{type:"text/calendar;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=`${data.depCode.toUpperCase()}-${data.arrCode.toUpperCase()}_${data.depDate}.ics`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const t=$("toast");t.textContent="✈️ .ics ready — open to add to Calendar";t.classList.remove("hidden");
+  setTimeout(()=>t.classList.add("hidden"),3500);
+});
+
+// Init
+show("paste");
+</script>
+</body>
+</html>
